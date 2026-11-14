@@ -9,6 +9,11 @@ updates:
       cargo-minor-patch:
         patterns: ["*"]
         update-types: ["minor", "patch"]
+    ignore:
+      # Keep v0.1 on the dependency set validated with Rust 1.85.
+      # Re-evaluate during the v0.2 toolchain/maintenance window.
+      - dependency-name: "toml"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: "/"
