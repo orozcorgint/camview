@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - English documentation, AI-agent instructions, security policy and CI.
 - Unit tests for URL building, credential redaction and TOML round-trips.
 
+### Changed
+
+- Updated `url` to 2.5.8.
+- Dependabot now checks monthly with a two-PR limit.
+
 ## [0.1.0] - 2026-11-13
 
 ### Added
