@@ -1,0 +1,41 @@
+# Example CamView configuration.
+# Copy this file to ~/.config/camview/config.toml (mode 0600) or let CamView
+# create it from the UI. Never commit a real config file: it contains camera
+# credentials.
+#
+# 192.0.2.10 is a documentation address (RFC 5737), not a real camera.
+
+[app]
+language = "en"
+profile = "balanced"      # "eco" or "balanced"
+render_fps = 15
+max_live_tiles = 4
+autostart = false
+
+[storage]
+dir = "/home/user/Videos/CamView"
+min_free_mb = 500
+
+[[cameras]]
+id = "front-door"
+name = "Front door"
+host = "192.0.2.10"
+tls = true                # RTSPS -> local socat tunnel
+rtsp_port = 554
+user = "viewer"
+password = ""
+main_path = "/stream0"
+sub_path = "/stream1"
+enabled = true
+
+[[cameras]]
+id = "driveway"
+name = "Driveway"
+host = "192.0.2.11"
+tls = false               # plain RTSP
+rtsp_port = 554
+user = "viewer"
+password = ""
+main_path = "/stream0"
+sub_path = "/stream1"
+enabled = true

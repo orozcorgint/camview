@@ -1,0 +1,62 @@
+name: Bug report
+description: Report a reproducible problem with CamView
+title: "[bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Do **not** include camera passwords, RTSP
+        URLs with credentials, recordings or personal network details.
+        For security issues, follow SECURITY.md instead of opening an issue.
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the problem and what you expected.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open CamView
+        2. ...
+        3. ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: CamView version or commit
+      placeholder: "0.1.0 or git SHA"
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Distro, session (X11/Wayland), CPU/GPU, libmpv version, VA-API driver.
+      placeholder: |
+        Debian 13, X11/XFCE, Intel Atom Z3735F, Mesa i965
+        libmpv 0.40, rustc 1.85.1
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log lines
+      description: Redact IP addresses, credentials and camera names.
+      render: text
+    validations:
+      required: false
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I removed credentials, IP addresses and personal data from logs.
+          required: true
+        - label: I checked that this is not a security vulnerability.
+          required: true

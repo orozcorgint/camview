@@ -1,0 +1,11 @@
+* text=auto eol=lf
+
+*.rs text
+*.toml text
+*.md text
+*.yml text
+*.yaml text
+*.svg text
+*.png binary
+*.jpg binary
+*.mkv binary

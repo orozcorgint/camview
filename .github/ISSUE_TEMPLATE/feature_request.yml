@@ -1,0 +1,46 @@
+name: Feature request
+description: Suggest a feature or improvement
+title: "[feature]: "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        CamView is intentionally small and low-memory. Please explain the
+        problem before proposing an implementation, and consider the impact on
+        a 1.8 GB Intel Atom machine.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+    validations:
+      required: true
+  - type: dropdown
+    id: connection
+    attributes:
+      label: Does it require an extra RTSP connection or decoder per camera?
+      options:
+        - "No"
+        - "Yes (explain why in the proposal)"
+        - "Not sure"
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: false
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - label: This is compatible with the project's non-goals in docs/ROADMAP.md.
+          required: false

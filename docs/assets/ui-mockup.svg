@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800" viewBox="0 0 1280 800" role="img" aria-label="CamView user interface mockup">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b0d11"/>
+      <stop offset="1" stop-color="#10141c"/>
+    </linearGradient>
+    <linearGradient id="video1" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1d2a33"/>
+      <stop offset="1" stop-color="#0d141a"/>
+    </linearGradient>
+    <linearGradient id="video2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#24252e"/>
+      <stop offset="1" stop-color="#101318"/>
+    </linearGradient>
+    <linearGradient id="video3" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#1b2b24"/>
+      <stop offset="1" stop-color="#0e1512"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000" flood-opacity="0.35"/>
+    </filter>
+    <style>
+      .ui { font-family: Inter, "Segoe UI", Roboto, sans-serif; }
+      .title { fill: #46beff; font-size: 23px; font-weight: 700; letter-spacing: -0.3px; }
+      .sub { fill: #7f8a9c; font-size: 11px; }
+      .btn { fill: #1c212b; stroke: #343c4d; }
+      .btn-text { fill: #dce3ee; font-size: 13px; }
+      .green { fill: #3cd282; }
+      .red { fill: #eb5050; }
+      .muted { fill: #8d97a8; font-size: 11px; }
+      .name { fill: #ffffff; font-size: 15px; font-weight: 600; }
+      .card { fill: #151a22; stroke: #2b3342; }
+      .rec { fill: #5a1717; }
+    </style>
+  </defs>
+
+  <rect width="1280" height="800" fill="url(#bg)"/>
+
+  <!-- Header -->
+  <rect x="0" y="0" width="1280" height="52" fill="#12151c"/>
+  <text x="16" y="33" class="ui title">CamView</text>
+  <rect x="138" y="12" width="126" height="28" rx="6" class="btn"/>
+  <text x="152" y="31" class="ui btn-text">Balanced ▾</text>
+  <text x="920" y="31" class="ui green" font-size="12">● 3 live</text>
+  <rect x="970" y="12" width="104" height="28" rx="6" fill="#3cd282"/>
+  <text x="984" y="31" class="ui" fill="#0b0d11" font-size="13" font-weight="600">Record all</text>
+  <rect x="1084" y="12" width="74" height="28" rx="6" class="btn"/>
+  <text x="1096" y="31" class="ui btn-text">Cameras</text>
+  <rect x="1168" y="12" width="88" height="28" rx="6" class="btn"/>
+  <text x="1180" y="31" class="ui btn-text">Settings</text>
+
+  <!-- Tile 1 -->
+  <g filter="url(#shadow)">
+    <rect x="12" y="64" width="620" height="330" rx="10" fill="url(#video1)" stroke="#3b4658"/>
+  </g>
+  <rect x="12" y="64" width="620" height="46" rx="10" fill="#000" opacity="0.45"/>
+  <circle cx="30" cy="88" r="4" fill="#3cd282"/>
+  <text x="42" y="86" class="ui name">Front door</text>
+  <text x="42" y="101" class="ui muted">640×360 · vaapi · substream</text>
+  <rect x="522" y="75" width="96" height="24" rx="5" class="rec"/>
+  <text x="536" y="92" class="ui" fill="#ffb4b4" font-size="12" font-weight="600">REC 00:42</text>
+  <!-- abstract camera scene: no real footage -->
+  <g opacity="0.5">
+    <path d="M60 360 L60 260 L180 210 L300 260 L300 360 Z" fill="#22313c"/>
+    <path d="M330 360 L330 245 L450 200 L570 250 L570 360 Z" fill="#1c2831"/>
+    <rect x="120" y="285" width="70" height="40" rx="3" fill="#314453"/>
+    <rect x="390" y="270" width="86" height="52" rx="3" fill="#2a3b47"/>
+    <path d="M12 350 C180 320 300 380 420 345 C500 322 560 345 632 330 L632 394 L12 394 Z" fill="#0a1014" opacity="0.8"/>
+  </g>
+  <rect x="24" y="358" width="150" height="20" rx="4" fill="#000" opacity="0.5"/>
+  <text x="32" y="372" class="ui muted">camera-01</text>
+
+  <!-- Tile 2 -->
+  <g filter="url(#shadow)">
+    <rect x="648" y="64" width="620" height="330" rx="10" fill="url(#video2)" stroke="#2b3342"/>
+  </g>
+  <rect x="648" y="64" width="620" height="46" rx="10" fill="#000" opacity="0.45"/>
+  <circle cx="666" cy="88" r="4" fill="#3cd282"/>
+  <text x="678" y="86" class="ui name">Driveway</text>
+  <text x="678" y="101" class="ui muted">640×360 · vaapi · substream</text>
+  <g opacity="0.45">
+    <path d="M690 360 L840 210 L1110 210 L1230 360 Z" fill="#1b2028"/>
+    <rect x="840" y="250" width="210" height="90" rx="4" fill="#2a303b"/>
+    <circle cx="940" cy="330" r="38" fill="#0e1217"/>
+    <circle cx="1050" cy="330" r="38" fill="#0e1217"/>
+    <rect x="980" y="230" width="40" height="70" fill="#37404d" opacity="0.6"/>
+  </g>
+  <rect x="660" y="358" width="150" height="20" rx="4" fill="#000" opacity="0.5"/>
+  <text x="668" y="372" class="ui muted">camera-02</text>
+
+  <!-- Tile 3 -->
+  <g filter="url(#shadow)">
+    <rect x="12" y="406" width="620" height="330" rx="10" fill="url(#video3)" stroke="#2b3342"/>
+  </g>
+  <rect x="12" y="406" width="620" height="46" rx="10" fill="#000" opacity="0.45"/>
+  <circle cx="30" cy="430" r="4" fill="#3cd282"/>
+  <text x="42" y="428" class="ui name">Backyard</text>
+  <text x="42" y="443" class="ui muted">640×360 · vaapi · substream</text>
+  <g opacity="0.45">
+    <path d="M30 700 L160 500 L300 550 L400 470 L610 700 Z" fill="#1c2a23"/>
+    <path d="M180 700 L300 560 L430 700 Z" fill="#121b16"/>
+    <rect x="420" y="520" width="150" height="100" rx="4" fill="#26352c"/>
+    <circle cx="530" cy="490" r="46" fill="#0e1712"/>
+  </g>
+  <rect x="24" y="700" width="150" height="20" rx="4" fill="#000" opacity="0.5"/>
+  <text x="32" y="714" class="ui muted">camera-03</text>
+
+  <!-- Add tile -->
+  <rect x="648" y="406" width="620" height="330" rx="10" fill="#151a22" stroke="#2b3342" stroke-dasharray="8 6"/>
+  <circle cx="958" cy="546" r="28" fill="#1c222c" stroke="#3a4558"/>
+  <text x="958" y="556" text-anchor="middle" class="ui" fill="#8d97a8" font-size="28">+</text>
+  <text x="958" y="606" text-anchor="middle" class="ui" fill="#8d97a8" font-size="17">Add camera</text>
+
+  <!-- Bottom bar -->
+  <rect x="0" y="748" width="1280" height="52" fill="#12151c"/>
+  <text x="16" y="779" class="ui" fill="#dce3ee" font-size="13" font-weight="600">Front door</text>
+  <line x1="112" y1="760" x2="112" y2="788" stroke="#343c4d"/>
+  <rect x="126" y="760" width="86" height="28" rx="6" class="btn"/>
+  <text x="140" y="779" class="ui btn-text">Snapshot</text>
+  <rect x="220" y="760" width="74" height="28" rx="6" class="btn"/>
+  <text x="234" y="779" class="ui btn-text">Listen</text>
+  <rect x="302" y="760" width="74" height="28" rx="6" fill="#eb5050"/>
+  <text x="316" y="779" class="ui" fill="#120b0b" font-size="13" font-weight="600">Record</text>
+  <rect x="384" y="760" width="124" height="28" rx="6" class="btn"/>
+  <text x="398" y="779" class="ui btn-text">Fullscreen</text>
+  <text x="1080" y="779" text-anchor="end" class="ui muted">RAM free 478 MB  ·  Disk free 10.6 GB</text>
+
+  <text x="1270" y="792" text-anchor="end" class="ui" fill="#3d4656" font-size="9">Illustrative mockup · no camera footage</text>
+</svg>

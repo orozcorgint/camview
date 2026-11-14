@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=CamView
+GenericName=IP camera viewer
+Comment=Lightweight RTSP camera viewer and recorder
+Exec=@BINDIR@/camview
+Icon=camview
+Terminal=false
+Categories=AudioVideo;Video;
+Keywords=camera;cctv;security;rtsp;rtsps;recording;
+StartupWMClass=camview
