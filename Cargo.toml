@@ -21,7 +21,7 @@ egui = "=0.32.3"
 libmpv2 = "=7.0.1"
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
-url = "=2.5.4"
+url = "=2.5.8"
 percent-encoding = "2"
 libc = "0.2"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
