@@ -159,12 +159,40 @@ impl Default for StorageConfig {
     }
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RecordingConfig {
+    /// Maximum total size of all CamView recordings. 0 means unlimited.
+    #[serde(default = "default_max_storage_mb")]
+    pub max_storage_mb: u64,
+    /// Length of each recording segment before it is rotated.
+    #[serde(default = "default_segment_seconds")]
+    pub segment_seconds: u64,
+}
+
+fn default_max_storage_mb() -> u64 {
+    1024
+}
+fn default_segment_seconds() -> u64 {
+    120
+}
+
+impl Default for RecordingConfig {
+    fn default() -> Self {
+        Self {
+            max_storage_mb: default_max_storage_mb(),
+            segment_seconds: default_segment_seconds(),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
 pub struct Config {
     #[serde(default)]
     pub app: AppConfig,
     #[serde(default)]
     pub storage: StorageConfig,
+    #[serde(default)]
+    pub recording: RecordingConfig,
     #[serde(default)]
     pub cameras: Vec<Camera>,
 }
@@ -437,6 +465,10 @@ mod tests {
                 dir: "/tmp/camview".into(),
                 min_free_mb: 500,
             },
+            recording: RecordingConfig {
+                max_storage_mb: 2048,
+                segment_seconds: 120,
+            },
             cameras: vec![sample()],
         };
         let text = toml::to_string(&cfg).expect("serialize");
@@ -444,5 +476,27 @@ mod tests {
         assert_eq!(back.cameras.len(), 1);
         assert_eq!(back.cameras[0].id, "front-door");
         assert_eq!(back.app.render_fps, 15);
+        assert_eq!(back.recording.max_storage_mb, 2048);
+    }
+
+    #[test]
+    fn legacy_config_without_recording_uses_default_limit() {
+        let text = r#"
+[app]
+language = "en"
+
+[storage]
+dir = "/tmp/camview"
+min_free_mb = 500
+
+[[cameras]]
+id = "front-door"
+name = "Front door"
+host = "192.0.2.10"
+"#;
+        let cfg: Config = toml::from_str(text).expect("deserialize legacy config");
+        assert_eq!(cfg.recording.max_storage_mb, 1024);
+        assert_eq!(cfg.recording.segment_seconds, 120);
+        assert_eq!(cfg.cameras.len(), 1);
     }
 }

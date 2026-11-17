@@ -91,9 +91,11 @@ pub struct Player {
     pub state: PlayerState,
     pub width: u32,
     pub height: u32,
+    pub aspect: f32,
     pub hwdec: String,
     pub audio: bool,
     recording: Option<PathBuf>,
+    segment_started: Option<Instant>,
     pub record_started: Option<Instant>,
     pub last_record_path: Option<PathBuf>,
     url: String,
@@ -139,9 +141,11 @@ impl Player {
             state: PlayerState::Idle,
             width: 0,
             height: 0,
+            aspect: 16.0 / 9.0,
             hwdec: String::new(),
             audio: false,
             recording: None,
+            segment_started: None,
             record_started: None,
             last_record_path: None,
             url: String::new(),
@@ -200,9 +204,15 @@ impl Player {
 
         let w: i64 = self.mpv.get_property("video-params/w").unwrap_or(0);
         let h: i64 = self.mpv.get_property("video-params/h").unwrap_or(0);
+        let aspect: f64 = self.mpv.get_property("video-params/aspect").unwrap_or(0.0);
         let core_idle: bool = self.mpv.get_property("core-idle").unwrap_or(true);
         self.width = w.max(0) as u32;
         self.height = h.max(0) as u32;
+        if aspect.is_finite() && aspect > 0.0 {
+            self.aspect = aspect as f32;
+        } else if self.width > 0 && self.height > 0 {
+            self.aspect = self.width as f32 / self.height as f32;
+        }
         if let Ok(hw) = self.mpv.get_property::<String>("hwdec-current") {
             self.hwdec = hw;
         }
@@ -299,20 +309,48 @@ impl Player {
         if self.recording.is_some() {
             return Err("This camera is already recording".into());
         }
-        let dir = storage_dir
-            .join(platform::sanitize_id(camera_slug))
-            .join(platform::date_dir());
-        platform::ensure_dir(&dir)?;
-        let file = dir.join(format!("{}.mkv", platform::time_file()));
+        let file = next_recording_file(storage_dir, camera_slug)?;
         let path_str = file.to_string_lossy().into_owned();
         self.mpv
             .set_property("stream-record", path_str)
             .map_err(|e| format!("Could not start recording: {e}"))?;
+        let now = Instant::now();
         self.recording = Some(file.clone());
-        self.record_started = Some(Instant::now());
+        self.record_started = Some(now);
+        self.segment_started = Some(now);
         self.last_record_path = Some(file.clone());
         platform::log_line(&format!("{}: recording to {}", self.id, file.display()));
         Ok(file)
+    }
+
+    /// Changes `stream-record` to a new file. mpv closes the old file and opens
+    /// the new one without touching the RTSP session.
+    pub fn rotate_recording(
+        &mut self,
+        storage_dir: &Path,
+        camera_slug: &str,
+    ) -> Result<PathBuf, String> {
+        if self.recording.is_none() {
+            return Err("This camera is not recording".into());
+        }
+        let file = next_recording_file(storage_dir, camera_slug)?;
+        let path_str = file.to_string_lossy().into_owned();
+        self.mpv
+            .set_property("stream-record", path_str)
+            .map_err(|e| format!("Could not rotate recording: {e}"))?;
+        self.recording = Some(file.clone());
+        self.segment_started = Some(Instant::now());
+        self.last_record_path = Some(file.clone());
+        platform::log_line(&format!("{}: new segment {}", self.id, file.display()));
+        Ok(file)
+    }
+
+    pub fn recording_path(&self) -> Option<&Path> {
+        self.recording.as_deref()
+    }
+
+    pub fn segment_elapsed(&self) -> Option<Duration> {
+        self.segment_started.map(|t| t.elapsed())
     }
 
     pub fn stop_recording(&mut self) -> Option<PathBuf> {
@@ -322,6 +360,7 @@ impl Player {
         let _ = self.mpv.set_property("stream-record", String::new());
         platform::log_line(&format!("{}: recording stopped", self.id));
         self.record_started = None;
+        self.segment_started = None;
         self.recording.take()
     }
 
@@ -336,6 +375,21 @@ impl Player {
         self.width = 0;
         self.height = 0;
     }
+}
+
+fn next_recording_file(storage_dir: &Path, camera_slug: &str) -> Result<PathBuf, String> {
+    let dir = storage_dir
+        .join(platform::sanitize_id(camera_slug))
+        .join(platform::date_dir());
+    platform::ensure_dir(&dir)?;
+    let base = platform::time_file_ms();
+    let mut file = dir.join(format!("{base}.mkv"));
+    let mut suffix = 2;
+    while file.exists() {
+        file = dir.join(format!("{base}-{suffix}.mkv"));
+        suffix += 1;
+    }
+    Ok(file)
 }
 
 impl Drop for Player {

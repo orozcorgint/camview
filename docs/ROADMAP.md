@@ -1,11 +1,14 @@
 # Roadmap
 
-CamView v0.1 is a focused viewer/recorder. The following items are intentionally
+CamView is a focused viewer/recorder. The following items are intentionally
 deferred. Priorities may change based on user feedback, but the connection and
 memory invariants in [AGENTS.md](../AGENTS.md) remain the default.
 
 ## v0.2 — quality of life
 
+- [x] Continuous recording with a global storage limit and oldest-clip pruning.
+- [x] Fullscreen digital zoom with touch, mouse/touchpad and keyboard.
+- [x] Automatic recording resume after a camera reconnect.
 - [ ] Spanish UI localization with a language setting (English is current).
 - [ ] Keyboard navigation and accessibility pass (focus, shortcuts, labels).
 - [ ] Better camera form validation (duplicate IDs, port/path checks).
@@ -14,11 +17,14 @@ memory invariants in [AGENTS.md](../AGENTS.md) remain the default.
       credentials.
 - [ ] Optional tray icon / minimize-to-tray.
 - [ ] Native Wayland support (current build targets X11/XWayland).
-- [ ] More unit tests for storage guards and reconnect backoff.
+- [ ] More unit tests for reconnect backoff.
+- [ ] Optional per-camera storage sub-limits on top of the global cap.
+- [ ] Evaluate Rust 1.95 + eframe 0.37 on the tablet, with a RAM/CPU benchmark
+      gate before switching away from 0.32.3.
 
 ## v0.3 — storage and playback
 
-- [ ] Retention policy (days and/or maximum GB), with dry-run preview.
+- [ ] Time-based retention in addition to the storage cap, with dry-run preview.
 - [ ] Recording timeline/playback UI with camera/date filters.
 - [ ] Export a clip without re-encoding.
 - [ ] Detect and repair interrupted MKV clips.

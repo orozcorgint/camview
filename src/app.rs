@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, TryRecvError};
 use std::sync::{Arc, Mutex};
@@ -6,8 +6,8 @@ use std::time::{Duration, Instant};
 
 use eframe::egui;
 use egui::{
-    Align2, Color32, CornerRadius, FontId, Frame, Margin, Rect, RichText, Sense, Stroke,
-    StrokeKind, Vec2,
+    Align2, Color32, CornerRadius, FontId, Frame, Margin, PointerButton, Rect, RichText, Sense,
+    Stroke, StrokeKind, Vec2,
 };
 use raw_window_handle::{HasDisplayHandle, RawDisplayHandle};
 
@@ -15,7 +15,9 @@ use crate::config::{Camera, Config, StreamKind};
 use crate::gltile::TileGl;
 use crate::platform;
 use crate::player::{Player, PlayerState};
+use crate::storage;
 use crate::tunnel::TunnelManager;
+use crate::zoom::{self, ZoomView};
 
 const BG: Color32 = Color32::from_rgb(11, 13, 17);
 const PANEL: Color32 = Color32::from_rgb(18, 21, 28);
@@ -51,8 +53,10 @@ struct TileInfo {
     state: PlayerState,
     width: u32,
     height: u32,
+    aspect: f32,
     hwdec: String,
     recording: bool,
+    record_desired: bool,
     audio: bool,
     record_secs: u64,
 }
@@ -63,8 +67,10 @@ impl Default for TileInfo {
             state: PlayerState::Idle,
             width: 0,
             height: 0,
+            aspect: 16.0 / 9.0,
             hwdec: String::new(),
             recording: false,
+            record_desired: false,
             audio: false,
             record_secs: 0,
         }
@@ -148,10 +154,18 @@ pub struct CamViewApp {
     fatal: Option<String>,
     disk_free: u64,
     mem_avail: u64,
+    record_intent: HashSet<String>,
+    record_usage_bytes: u64,
+    last_record_retry: HashMap<String, Instant>,
+    zoom: ZoomView,
+    zoom_video_rect: Rect,
+    zoom_content_rect: Rect,
     dirty: bool,
     needs_sync: bool,
     last_tunnel_check: Instant,
     last_disk_check: Instant,
+    last_storage_check: Instant,
+    storage_prune_now: bool,
     last_save: Instant,
 }
 
@@ -174,6 +188,7 @@ impl CamViewApp {
             _ => None,
         });
         let disk_free = platform::disk_free_mb(Path::new(&cfg.storage.dir)).unwrap_or(0);
+        let record_usage_bytes = storage::usage_bytes(Path::new(&cfg.storage.dir));
 
         let app = Self {
             selected: cfg.cameras.iter().find(|c| c.enabled).map(|c| c.id.clone()),
@@ -195,10 +210,18 @@ impl CamViewApp {
             fatal: None,
             disk_free,
             mem_avail: platform::mem_available_mb().unwrap_or(0),
+            record_intent: HashSet::new(),
+            record_usage_bytes,
+            last_record_retry: HashMap::new(),
+            zoom: ZoomView::default(),
+            zoom_video_rect: Rect::from_min_size(egui::Pos2::ZERO, Vec2::ZERO),
+            zoom_content_rect: Rect::from_min_size(egui::Pos2::ZERO, Vec2::ZERO),
             dirty: false,
             needs_sync: true,
             last_tunnel_check: Instant::now(),
             last_disk_check: Instant::now() - Duration::from_secs(10),
+            last_storage_check: Instant::now() - Duration::from_secs(10),
+            storage_prune_now: false,
             last_save: Instant::now(),
         };
 
@@ -210,6 +233,10 @@ impl CamViewApp {
     }
 
     fn apply_theme(&self, ctx: &egui::Context) {
+        // Ctrl +/- must zoom the fullscreen video, not egui's whole UI.
+        ctx.options_mut(|options| options.zoom_with_keyboard = false);
+        ctx.set_zoom_factor(1.0);
+
         let mut visuals = egui::Visuals::dark();
         visuals.panel_fill = BG;
         visuals.window_fill = PANEL;
@@ -281,6 +308,7 @@ impl CamViewApp {
     }
 
     fn player_info(&self, id: &str) -> TileInfo {
+        let desired = self.record_intent.contains(id);
         let Some(player) = self.players.get(id) else {
             return TileInfo::default();
         };
@@ -291,17 +319,21 @@ impl CamViewApp {
             state: p.state.clone(),
             width: p.width,
             height: p.height,
+            aspect: p.aspect,
             hwdec: p.hwdec.clone(),
             recording: p.is_recording(),
+            record_desired: p.is_recording() || desired,
             audio: p.audio,
             record_secs: p.record_started.map(|t| t.elapsed().as_secs()).unwrap_or(0),
         }
     }
 
     fn any_recording(&self) -> bool {
-        self.players
-            .values()
-            .any(|p| p.lock().map(|p| p.is_recording()).unwrap_or(false))
+        !self.record_intent.is_empty()
+            || self
+                .players
+                .values()
+                .any(|p| p.lock().map(|p| p.is_recording()).unwrap_or(false))
     }
 
     fn sync_players(&mut self) {
@@ -324,11 +356,12 @@ impl CamViewApp {
             if desired_ids.contains(&id) {
                 continue;
             }
-            let keep = self
-                .players
-                .get(&id)
-                .and_then(|p| p.lock().ok().map(|p| p.is_recording()))
-                .unwrap_or(false);
+            let keep = self.record_intent.contains(&id)
+                || self
+                    .players
+                    .get(&id)
+                    .and_then(|p| p.lock().ok().map(|p| p.is_recording()))
+                    .unwrap_or(false);
             if !keep {
                 if let Some(player) = self.players.remove(&id) {
                     if let Ok(mut p) = player.lock() {
@@ -398,6 +431,7 @@ impl CamViewApp {
         match id {
             Some(id) => {
                 if self.fullscreen.as_deref() != Some(id.as_str()) {
+                    self.zoom.reset();
                     self.fullscreen = Some(id.clone());
                     self.selected = Some(id.clone());
                     self.switch_stream(&id, StreamKind::Main);
@@ -406,11 +440,20 @@ impl CamViewApp {
             }
             None => {
                 if let Some(id) = self.fullscreen.take() {
+                    self.zoom.reset();
                     self.switch_stream(&id, StreamKind::Sub);
                     self.sync_players();
                 }
             }
         }
+    }
+
+    fn adjust_zoom(&mut self, factor: f32) {
+        if self.zoom_video_rect.width() <= 0.0 {
+            return;
+        }
+        self.zoom
+            .zoom_center(self.zoom_video_rect, self.zoom_content_rect, factor);
     }
 
     fn set_profile(&mut self, profile: &str) {
@@ -425,35 +468,67 @@ impl CamViewApp {
         self.dirty = true;
     }
 
-    fn start_recording_for(&mut self, id: &str) {
+    fn start_recording_for(&mut self, id: &str, announce: bool) -> bool {
+        if self.record_intent.contains(id) {
+            return true;
+        }
         let Some(cam) = self.cfg.camera(id).cloned() else {
-            return;
+            return false;
         };
         if self.disk_free > 0 && self.disk_free < self.cfg.storage.min_free_mb {
-            self.toast("Low disk space: recording cancelled");
-            return;
+            if announce {
+                self.toast("Low disk space: recording cancelled");
+            }
+            return false;
         }
         let Some(player) = self.players.get(id).cloned() else {
-            self.toast("Camera is not loaded");
-            return;
+            if announce {
+                self.toast("Camera is not loaded");
+            }
+            return false;
         };
+        if player.lock().map(|p| p.is_recording()).unwrap_or(false) {
+            return true;
+        }
+
+        self.record_intent.insert(id.to_string());
+        self.last_record_retry.remove(id);
         let live = player.lock().map(|p| p.state.is_live()).unwrap_or(false);
         if !live {
-            self.toast("Wait until the camera is live before recording");
-            return;
+            if announce {
+                self.toast("Recording will start when the camera is live");
+            }
+            return true;
         }
+
         let storage = PathBuf::from(&self.cfg.storage.dir);
         let mut p = match player.lock() {
             Ok(p) => p,
-            Err(_) => return,
+            Err(_) => return true,
         };
         match p.start_recording(&storage, &cam.slug()) {
-            Ok(path) => self.toast(format!("Recording {} → {}", cam.name, path.display())),
-            Err(e) => self.toast(e),
+            Ok(path) => {
+                if announce {
+                    self.toast(format!("Recording {} → {}", cam.name, path.display()));
+                }
+                true
+            }
+            Err(e) => {
+                if announce {
+                    self.toast(e);
+                } else {
+                    platform::log_line(&format!("{}: {e}", cam.name));
+                }
+                self.last_record_retry
+                    .insert(id.to_string(), Instant::now() + Duration::from_secs(10));
+                false
+            }
         }
     }
 
     fn stop_recording(&mut self, id: &str) {
+        self.record_intent.remove(id);
+        self.last_record_retry.remove(id);
         let Some(player) = self.players.get(id).cloned() else {
             return;
         };
@@ -470,9 +545,12 @@ impl CamViewApp {
                 self.switch_stream(id, StreamKind::Sub);
             }
         }
+        self.needs_sync = true;
     }
 
     fn stop_all_recordings(&mut self) {
+        self.record_intent.clear();
+        self.last_record_retry.clear();
         let ids: Vec<String> = self.players.keys().cloned().collect();
         for id in ids {
             if let Some(p) = self.players.get(&id) {
@@ -480,6 +558,118 @@ impl CamViewApp {
                     let _ = p.stop_recording();
                 }
             }
+        }
+        self.needs_sync = true;
+    }
+
+    fn active_recording_paths(&self) -> HashSet<PathBuf> {
+        self.players
+            .values()
+            .filter_map(|p| {
+                p.lock()
+                    .ok()
+                    .and_then(|p| p.recording_path().map(Path::to_path_buf))
+            })
+            .collect()
+    }
+
+    fn refresh_storage(&mut self, prune: bool) {
+        let root = PathBuf::from(&self.cfg.storage.dir);
+        let active = self.active_recording_paths();
+        if prune && self.cfg.recording.max_storage_mb > 0 {
+            let max_bytes = self
+                .cfg
+                .recording
+                .max_storage_mb
+                .saturating_mul(1024 * 1024);
+            let target = max_bytes.saturating_sub(storage::SEGMENT_MAX_BYTES).max(1);
+            match storage::prune(&root, target, &active) {
+                Ok(report) if report.deleted_files > 0 => {
+                    platform::log_line(&format!(
+                        "Recording storage: removed {} clips ({})",
+                        report.deleted_files,
+                        platform::format_mb(report.deleted_bytes / (1024 * 1024))
+                    ));
+                }
+                Ok(_) => {}
+                Err(e) => platform::log_line(&format!("Recording storage: {e}")),
+            }
+        }
+        self.record_usage_bytes = storage::usage_bytes(&root);
+    }
+
+    fn maintain_recordings(&mut self) {
+        let segment_secs = self.cfg.recording.segment_seconds.max(30);
+        let ids: Vec<String> = self.record_intent.iter().cloned().collect();
+        let mut rotated = false;
+
+        for id in ids {
+            let Some(cam) = self.cfg.camera(&id).cloned() else {
+                self.record_intent.remove(&id);
+                continue;
+            };
+            if !cam.enabled {
+                self.record_intent.remove(&id);
+                continue;
+            }
+            let Some(player) = self.players.get(&id).cloned() else {
+                continue;
+            };
+
+            let info = match player.lock() {
+                Ok(p) => (
+                    p.is_recording(),
+                    p.state.is_live(),
+                    p.segment_elapsed(),
+                    p.recording_path()
+                        .and_then(|path| std::fs::metadata(path).ok())
+                        .map(|meta| meta.len()),
+                ),
+                Err(_) => continue,
+            };
+
+            if info.0 {
+                let rotate_by_time = info
+                    .2
+                    .map(|elapsed| elapsed >= Duration::from_secs(segment_secs))
+                    .unwrap_or(false);
+                let rotate_by_size = info
+                    .3
+                    .map(|size| size >= storage::SEGMENT_MAX_BYTES)
+                    .unwrap_or(false);
+                if rotate_by_time || rotate_by_size {
+                    let storage = PathBuf::from(&self.cfg.storage.dir);
+                    let result = player
+                        .lock()
+                        .map(|mut p| p.rotate_recording(&storage, &cam.slug()));
+                    match result {
+                        Ok(Ok(_)) => rotated = true,
+                        Ok(Err(e)) => {
+                            platform::log_line(&format!("{}: {e}", cam.name));
+                            if let Ok(mut p) = player.lock() {
+                                let _ = p.stop_recording();
+                            }
+                            self.last_record_retry
+                                .insert(id.clone(), Instant::now() + Duration::from_secs(5));
+                        }
+                        Err(_) => {}
+                    }
+                }
+            } else if info.1 {
+                let retry = self
+                    .last_record_retry
+                    .get(&id)
+                    .map(|at| *at <= Instant::now())
+                    .unwrap_or(true);
+                if retry {
+                    self.start_recording_for(&id, false);
+                }
+            }
+        }
+
+        if rotated {
+            self.refresh_storage(true);
+            self.last_storage_check = Instant::now();
         }
     }
 
@@ -528,24 +718,24 @@ impl CamViewApp {
                 }
             }
             UiAction::ToggleRecord(id) => {
-                let recording = self.player_info(&id).recording;
-                if recording {
+                if self.record_intent.contains(&id) || self.player_info(&id).recording {
                     self.stop_recording(&id);
                 } else {
-                    self.start_recording_for(&id);
+                    self.start_recording_for(&id, true);
                 }
             }
             UiAction::RecordAll => {
                 let ids: Vec<String> = self.players.keys().cloned().collect();
                 let mut count = 0;
                 for id in ids {
-                    if self.player_info(&id).state.is_live() {
-                        self.start_recording_for(&id);
+                    if self.start_recording_for(&id, false) {
                         count += 1;
                     }
                 }
                 if count == 0 {
-                    self.toast("No live cameras to record");
+                    self.toast("No cameras available to record");
+                } else {
+                    self.toast(format!("Recording {count} cameras"));
                 }
             }
             UiAction::StopAll => {
@@ -580,6 +770,8 @@ impl CamViewApp {
                     cam.enabled = enabled;
                 }
                 if !enabled {
+                    self.record_intent.remove(&id);
+                    self.last_record_retry.remove(&id);
                     self.tunnels.stop(&id);
                     if let Some(p) = self.players.remove(&id) {
                         if let Ok(mut p) = p.lock() {
@@ -606,6 +798,8 @@ impl CamViewApp {
     }
 
     fn delete_camera(&mut self, id: &str) {
+        self.record_intent.remove(id);
+        self.last_record_retry.remove(id);
         self.tunnels.stop(id);
         if let Some(p) = self.players.remove(id) {
             if let Ok(mut p) = p.lock() {
@@ -802,16 +996,29 @@ impl CamViewApp {
             }
         }
 
+        self.maintain_recordings();
+
+        if self.storage_prune_now || self.last_storage_check.elapsed() > Duration::from_secs(10) {
+            self.storage_prune_now = false;
+            self.last_storage_check = Instant::now();
+            self.refresh_storage(true);
+        }
+
         if self.last_disk_check.elapsed() > Duration::from_secs(5) {
             self.last_disk_check = Instant::now();
             self.disk_free = platform::disk_free_mb(Path::new(&self.cfg.storage.dir)).unwrap_or(0);
             self.mem_avail = platform::mem_available_mb().unwrap_or(0);
             if self.any_recording() && self.disk_free < self.cfg.storage.min_free_mb {
-                self.stop_all_recordings();
-                self.toast(format!(
-                    "Less than {} MB free: recordings stopped",
-                    self.cfg.storage.min_free_mb
-                ));
+                self.refresh_storage(true);
+                self.disk_free =
+                    platform::disk_free_mb(Path::new(&self.cfg.storage.dir)).unwrap_or(0);
+                if self.disk_free < self.cfg.storage.min_free_mb {
+                    self.stop_all_recordings();
+                    self.toast(format!(
+                        "Less than {} MB free: recordings stopped",
+                        self.cfg.storage.min_free_mb
+                    ));
+                }
             }
             if self.mem_avail > 0 && self.mem_avail < 100 && self.cfg.app.render_fps > 5 {
                 self.cfg.app.render_fps = 5;
@@ -842,6 +1049,7 @@ impl CamViewApp {
         if let Some(full) = &self.fullscreen {
             if self.cfg.camera(full).map(|c| !c.enabled).unwrap_or(true) {
                 self.fullscreen = None;
+                self.zoom.reset();
                 self.needs_sync = true;
             }
         }
@@ -963,12 +1171,12 @@ impl CamViewApp {
                         }
                         if ui
                             .add(
-                                egui::Button::new(if info.recording {
+                                egui::Button::new(if info.record_desired {
                                     "Stop recording"
                                 } else {
                                     "Record"
                                 })
-                                .fill(if info.recording {
+                                .fill(if info.record_desired {
                                     RED
                                 } else {
                                     CARD_HOVER
@@ -999,11 +1207,39 @@ impl CamViewApp {
                                 Some(id.clone())
                             }));
                         }
+                        if self.fullscreen.is_some() {
+                            ui.separator();
+                            if ui.small_button("−").clicked() {
+                                self.adjust_zoom(1.0 / 1.25);
+                            }
+                            ui.label(
+                                RichText::new(format!("{:.0}%", self.zoom.percent()))
+                                    .size(11.0)
+                                    .color(MUTED),
+                            );
+                            if ui.small_button("+").clicked() {
+                                self.adjust_zoom(1.25);
+                            }
+                            if ui.small_button("Reset").clicked() {
+                                self.zoom.reset();
+                            }
+                        }
                     } else {
                         ui.label(RichText::new("Select a camera").color(MUTED));
                     }
 
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let usage = platform::format_mb(self.record_usage_bytes / (1024 * 1024));
+                        let limit = if self.cfg.recording.max_storage_mb == 0 {
+                            "unlimited".to_string()
+                        } else {
+                            platform::format_mb(self.cfg.recording.max_storage_mb)
+                        };
+                        ui.label(
+                            RichText::new(format!("Clips {usage} / {limit}"))
+                                .size(11.0)
+                                .color(MUTED),
+                        );
                         let pages = self.pages();
                         if pages > 1 {
                             if ui
@@ -1065,24 +1301,116 @@ impl CamViewApp {
             .clicked()
     }
 
+    fn handle_zoom_input(
+        &mut self,
+        ui: &egui::Ui,
+        video: Rect,
+        content: Rect,
+        response: &egui::Response,
+    ) {
+        if !ui.ctx().wants_keyboard_input() {
+            let (zoom_in, zoom_out, reset) = ui.ctx().input(|i| {
+                (
+                    i.modifiers.command
+                        && (i.key_pressed(egui::Key::Plus) || i.key_pressed(egui::Key::Equals)),
+                    i.modifiers.command && i.key_pressed(egui::Key::Minus),
+                    i.modifiers.command && i.key_pressed(egui::Key::Num0),
+                )
+            });
+            if reset {
+                self.zoom.reset();
+            }
+            if zoom_in {
+                self.zoom.zoom_center(video, content, 1.25);
+            }
+            if zoom_out {
+                self.zoom.zoom_center(video, content, 1.0 / 1.25);
+            }
+        }
+
+        let (multi, zoom_delta, scroll) = ui
+            .ctx()
+            .input(|i| (i.multi_touch(), i.zoom_delta(), i.raw_scroll_delta));
+
+        if let Some(multi) = multi {
+            if video.contains(multi.center_pos) {
+                self.zoom
+                    .zoom_at(video, content, multi.center_pos, multi.zoom_delta);
+                self.zoom.pan_screen(content, multi.translation_delta);
+            }
+            return;
+        }
+
+        if self.zoom.is_zoomed() && response.dragged_by(PointerButton::Primary) {
+            self.zoom.pan_screen(content, response.drag_delta());
+        }
+
+        let Some(pos) = response.hover_pos() else {
+            return;
+        };
+        if !video.contains(pos) {
+            return;
+        }
+
+        // Ctrl+wheel and pinch-zoom events arrive as zoom_delta. A plain wheel
+        // or two-finger touchpad scroll zooms as well, because fullscreen video
+        // has nothing else to scroll.
+        let factor = if (zoom_delta - 1.0).abs() > 0.0001 {
+            zoom_delta
+        } else if scroll.y.abs() > 0.001 {
+            (scroll.y * 0.0025).exp()
+        } else {
+            1.0
+        };
+        if (factor - 1.0).abs() > 0.0001 {
+            self.zoom.zoom_at(video, content, pos, factor);
+        }
+    }
+
     fn draw_tile(
-        &self,
+        &mut self,
         ui: &mut egui::Ui,
         rect: Rect,
         cam: &Camera,
         fullscreen: bool,
     ) -> Option<UiAction> {
-        let response = ui.allocate_rect(rect, Sense::click());
-        let painter = ui.painter();
+        let sense = if fullscreen {
+            Sense::click_and_drag()
+        } else {
+            Sense::click()
+        };
+        let response = ui.allocate_rect(rect, sense);
         let info = self.player_info(&cam.id);
         let selected = self.selected.as_deref() == Some(cam.id.as_str());
+        let aspect = if info.width > 0 && info.height > 0 {
+            info.aspect
+        } else {
+            16.0 / 9.0
+        };
+        let content = zoom::fit_content(rect, aspect);
 
+        if fullscreen {
+            self.zoom_video_rect = rect;
+            self.zoom_content_rect = content;
+            self.handle_zoom_input(ui, rect, content, &response);
+        }
+        let view = if fullscreen {
+            self.zoom
+        } else {
+            ZoomView::default()
+        };
+        let (uv_offset, uv_scale) = view.uv_transform();
+        let high_res = fullscreen && view.is_zoomed();
+
+        let painter = ui.painter();
         painter.rect_filled(rect, CornerRadius::same(8), CARD);
 
         if let (Some(player), Some(tile)) = (self.players.get(&cam.id), self.gl_tiles.get(&cam.id))
         {
             let player = player.clone();
             let tile = tile.clone();
+            let uv_offset = [uv_offset.x, uv_offset.y];
+            let uv_scale = [uv_scale.x, uv_scale.y];
             let callback = eframe::egui_glow::CallbackFn::new(move |info, painter| {
                 let vp = info.viewport_in_pixels();
                 let gl = painter.gl();
@@ -1094,6 +1422,9 @@ impl CamViewApp {
                         vp.from_bottom_px,
                         vp.width_px,
                         vp.height_px,
+                        uv_offset,
+                        uv_scale,
+                        high_res,
                     );
                 }
             });
@@ -1241,7 +1572,7 @@ impl CamViewApp {
                 ui.close();
             }
             if ui
-                .button(if info.recording {
+                .button(if info.record_desired {
                     "Stop recording"
                 } else {
                     "Record"
@@ -1269,6 +1600,10 @@ impl CamViewApp {
         }
 
         if response.double_clicked() {
+            if fullscreen && self.zoom.is_zoomed() {
+                self.zoom.reset();
+                return None;
+            }
             return Some(UiAction::Fullscreen(if fullscreen {
                 None
             } else {
@@ -1550,6 +1885,7 @@ impl CamViewApp {
         let mut max_tiles = self.cfg.app.max_live_tiles;
         let mut storage = self.cfg.storage.dir.clone();
         let mut min_free = self.cfg.storage.min_free_mb;
+        let mut max_gb = self.cfg.recording.max_storage_mb as f32 / 1024.0;
         let mut autostart = self.cfg.app.autostart;
         let mut open_storage = false;
         let mut changed = false;
@@ -1609,6 +1945,23 @@ impl CamViewApp {
                         });
                         ui.end_row();
 
+                        ui.label("Maximum recording storage");
+                        ui.add(
+                            egui::Slider::new(&mut max_gb, 0.0..=20.0)
+                                .step_by(0.5)
+                                .suffix(" GB"),
+                        );
+                        ui.end_row();
+
+                        ui.label("Recordings use");
+                        ui.label(
+                            RichText::new(platform::format_mb(
+                                self.record_usage_bytes / (1024 * 1024),
+                            ))
+                            .color(MUTED),
+                        );
+                        ui.end_row();
+
                         ui.label("Minimum free space");
                         ui.add(egui::Slider::new(&mut min_free, 100..=5000).suffix(" MB"));
                         ui.end_row();
@@ -1616,7 +1969,8 @@ impl CamViewApp {
                 ui.label(
                     RichText::new(
                         "Recording is a direct stream copy (no re-encoding). \
-                         It stops automatically if free disk space falls below the minimum.",
+                         Oldest clips are deleted automatically when the limit is reached; \
+                         0 GB means unlimited. It also stops if free disk space falls below the minimum.",
                     )
                     .size(11.0)
                     .color(MUTED),
@@ -1667,10 +2021,17 @@ impl CamViewApp {
         if storage != self.cfg.storage.dir {
             self.cfg.storage.dir = storage;
             let _ = platform::ensure_dir(Path::new(&self.cfg.storage.dir));
+            self.storage_prune_now = true;
             changed = true;
         }
         if min_free != self.cfg.storage.min_free_mb {
             self.cfg.storage.min_free_mb = min_free;
+            changed = true;
+        }
+        let max_storage_mb = (max_gb.max(0.0) * 1024.0).round() as u64;
+        if max_storage_mb != self.cfg.recording.max_storage_mb {
+            self.cfg.recording.max_storage_mb = max_storage_mb;
+            self.storage_prune_now = true;
             changed = true;
         }
         if autostart != self.cfg.app.autostart {

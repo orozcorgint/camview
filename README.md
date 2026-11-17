@@ -29,6 +29,11 @@ simultaneous viewing and recording.
 - Per-camera audio monitoring; audio is included in recordings.
 - Record / stop per camera and record-all. Recording is a **stream copy** to
   Matroska (no re-encoding, no extra CPU or camera connection).
+- Continuous recording with a global storage limit (1 GB by default,
+  configurable). The oldest clips are removed automatically; recordings resume
+  after a camera reconnects.
+- Fullscreen digital zoom: pinch, mouse/touchpad, drag-to-pan and
+  `Ctrl` + `+` / `-` / `0`.
 - Selectable recording folder and a free-space guard.
 - Autostart, single-instance guard, rotating logs and `0600` configuration.
 - Clean shutdown finalizes the active recording.
@@ -92,7 +97,7 @@ and the rest of the desktop matter.
 
 Runtime:
 
-- Linux with X11 (XWayland works; native Wayland is not enabled in v0.1).
+- Linux with X11 (XWayland works; native Wayland is not enabled yet).
 - `libmpv2`
 - `socat` (only for RTSPS cameras)
 - `ffprobe` (only used by the "Test camera" button)
@@ -127,6 +132,16 @@ The desktop entry uses the absolute install path, so it works even when
 The release build is intentionally conservative. On very small machines it can
 take a while; use `CARGO_BUILD_JOBS=2` to keep memory pressure under control.
 
+### Dependency policy
+
+`eframe`/`egui` are pinned to **0.32.3**, the newest release compatible with
+Debian 13's Rust 1.85 toolchain. Newer egui releases require Rust 1.95 and a
+different application lifecycle; moving to them would add a larger build and a
+new toolchain requirement without a proven benefit on the target Atom tablet.
+Everything else is kept current through `Cargo.lock` and Dependabot. The
+upgrade is tracked in [docs/ROADMAP.md](docs/ROADMAP.md) as a separate
+maintenance task.
+
 ## Usage
 
 1. Launch **CamView** from the application menu or with
@@ -135,8 +150,17 @@ take a while; use `CARGO_BUILD_JOBS=2` to keep memory pressure under control.
 3. Enter a name, host/IP, RTSP port, stream paths and credentials.
    Enable **TLS** for RTSPS cameras (CamView will create the local tunnel).
 4. Use **Test** to verify the connection before relying on it.
-5. Choose a recording folder in **Settings**, then use **Record** or
-   **Record all**.
+5. Choose a recording folder and a storage limit in **Settings**, then use
+   **Record** or **Record all**.
+6. Double-click a camera (or use **Fullscreen**) to open it. Pinch with two
+   fingers, scroll the mouse/touchpad or use `Ctrl` + `+` / `-` to zoom; drag
+   with one finger or the mouse to pan. `Ctrl` + `0` resets the zoom.
+
+Recording uses the stream that is currently loaded. In the grid this is the
+substream; in fullscreen it is the main stream. If you need main-stream
+recordings, stop recording, open the camera fullscreen, and start recording
+again. Switching quality while recording is blocked to preserve the
+one-session-per-camera invariant.
 
 The first launch can import cameras from an existing M3U playlist
 (`~/cameras.m3u` or the legacy `~/camaras.m3u`) in **read-only** mode. CamView
@@ -147,7 +171,7 @@ never modifies the source playlist, its player settings or its services.
 | Path | Purpose |
 |---|---|
 | `~/.config/camview/config.toml` | Camera list and preferences (`0600`) |
-| `~/Videos/CamView/<camera>/<date>/*.mkv` | Recordings |
+| `~/Videos/CamView/<camera>/<date>/*.mkv` | Recordings (oldest clips pruned at the storage limit) |
 | `~/Pictures/CamView/` | Snapshots |
 | `~/.local/state/camview/camview.log` | Rotating log (credentials redacted) |
 
@@ -180,9 +204,14 @@ a short recording. It requires real cameras and is not run in CI.
 
 ## Limitations / roadmap
 
-- No PTZ/ONVIF, motion detection, schedules, notifications or retention rules
-  in v0.1.
+- No PTZ/ONVIF, motion detection, schedules or notifications.
 - The app must be running to record.
+- The storage limit is global and is enforced by deleting the oldest finished
+  clips; the clip currently being written can finish above the limit.
+- Zoom is digital: it crops and scales the decoded frame, so maximum zoom is
+  limited by the source resolution.
+- Two-finger pinch requires the touchscreen to be exposed through XInput2.
+  Touchpad scroll, `Ctrl` + wheel and keyboard zoom work without it.
 - One process, one desktop user; no web or mobile client.
 - Future work is tracked in [docs/ROADMAP.md](docs/ROADMAP.md).
 

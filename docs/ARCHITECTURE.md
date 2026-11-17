@@ -13,7 +13,7 @@ runtime small: no web server, no database, no async runtime and no transcoding.
 - Coexist with another RTSP client (for example, a legacy IPTV player) that may
   use the same camera.
 
-**Non-goals for v0.1**
+**Non-goals**
 
 - PTZ/ONVIF, motion detection, schedules, notifications, retention policies.
 - Remote/mobile access, cloud sync, multi-user accounts.
@@ -50,11 +50,19 @@ Rendering a tile:
 
 1. `egui_glow` invokes a `PaintCallback` with the tile rectangle and the current
    GL context.
-2. `TileGl::draw()` binds a tile-sized FBO and calls
-   `mpv_render_context_render(fbo, w, h, flip_y = true)`.
-3. The FBO is unbound and a small GLSL program draws a fullscreen triangle into
-   the tile viewport (the viewport that egui set before the callback).
-4. egui restores its own painting state and draws the overlays.
+2. `TileGl::draw()` computes the letterboxed video rectangle from
+   `video-params/aspect` and binds an FBO with the same aspect ratio.
+3. `mpv_render_context_render(fbo, w, h, flip_y = true)` renders the full frame.
+4. The FBO is unbound and a small GLSL program draws a fullscreen triangle into
+   the fitted video viewport, sampling with zoom/pan UVs.
+5. egui restores its own painting state and draws the overlays.
+
+In the grid the FBO is the size of the fitted video rectangle. In fullscreen it
+can be up to 1920×1080 to preserve detail while zooming; the grid never pays
+that cost. Zoom uses `view.zoom` and a normalized crop center, with the shader
+receiving `uv_offset` and `uv_scale`. No extra decoder, texture per zoom level or
+camera connection is created. Panning is clamped so the crop never leaves the
+source frame.
 
 **Why an FBO instead of rendering mpv directly into the window?**
 `mpv_render_context_render()` changes the OpenGL viewport. If called directly
@@ -115,8 +123,9 @@ is closed before the new one is opened. If a recording is active, the quality
 switch is blocked until the user stops recording.
 
 `sync_players()` is the only place that creates or destroys players. It keeps
-players that are recording even if they are not on the current page, so a page
-change or fullscreen transition cannot silently stop a recording.
+players that are recording, or that have a pending recording intent, even if
+they are not on the current page. A page change or fullscreen transition cannot
+silently stop a recording.
 
 ## 6. TLS tunnel
 
@@ -147,33 +156,49 @@ Recording is a container-level copy:
 
 ```rust
 mpv.set_property("stream-record", output_path);
+// rotate to a new segment without touching the RTSP session
+mpv.set_property("stream-record", next_output_path);
 // ...
 mpv.set_property("stream-record", "");
 ```
 
-- Output: Matroska (`.mkv`), one file per recording session.
-- Path: `<storage>/<camera>/<YYYY-MM-DD>/<HH-MM-SS>.mkv`.
+- Output: Matroska (`.mkv`), one file per segment.
+- Path: `<storage>/<camera>/<YYYY-MM-DD>/<HH-MM-SS-mmm>.mkv`.
 - No second connection, no ffmpeg child, no re-encoding.
 - Audio is included if the camera stream has it.
 - The file may remain 0 bytes for a while because libavformat buffers the
-  container header. It is finalized when the property is cleared or the player
-  is destroyed; do not use file size as a liveness signal.
-- If the stream reloads (camera loss, quality change), the recording is stopped
-  first. The user can start a new clip.
+  container header. It is finalized when the property is changed or cleared;
+  do not use file size as a liveness signal.
+- Segments rotate after `segment_seconds` (default 120 s) or 64 MiB, whichever
+  comes first. mpv closes the old file and opens the new one on the same RTSP
+  session; the maximum recording gap is the small demuxer-cache transition.
+- The global storage limit defaults to 1024 MiB and is configurable (0 means
+  unlimited). After a rotation, the app deletes the oldest finished clips until
+  it reaches `limit - 64 MiB`, never touching the active file, files younger
+  than 30 seconds, symlinks or files outside the CamView layout. The current
+  segment can finish above the limit, so the effective cap has one segment of
+  headroom.
+- If the stream reloads (camera loss, tunnel restart, quality change), the
+  recording is stopped first. If the user still has recording intent, it resumes
+  automatically when the camera is live again.
 - A storage watchdog stops all recordings if free space drops below the
   configured threshold (default 500 MB).
 
 Normal application exit and `SIGTERM` close the viewport, which triggers
 `on_exit` and finalizes the active recording. A `SIGKILL` or power loss can lose
-the clip that was being written; this is an accepted trade-off for a desktop
-viewer.
+the clip that was being written; rotating segments limits that loss to one
+segment. This is an accepted trade-off for a desktop viewer.
+
+The storage limit is global across cameras. The main/sub selection still
+applies: a recording made from the grid captures the substream, and a recording
+started in fullscreen captures the main stream.
 
 ## 8. Configuration and data
 
 ```
-~/.config/camview/config.toml        camera list, storage, quality (0600)
+~/.config/camview/config.toml        camera list, storage, recording cap (0600)
 ~/.local/state/camview/camview.log   rotating log, credentials redacted
-~/Videos/CamView/...                 recordings
+~/Videos/CamView/...                 segmented recordings
 ~/Pictures/CamView/                  snapshots
 ```
 
@@ -196,6 +221,7 @@ player's settings or services.
 | 3 `socat` listeners | ~5 MB |
 | Recording (stream-record) | in-process, no extra decoder |
 | Fullscreen main stream (1 camera) | replaces substream load, ~+30–40 MB |
+| Fullscreen zoom FBO (only while zoomed) | ≤ 1920×1080 RGBA, ~8 MB |
 
 Measured with 3 cameras on the target tablet: ~215 MB RSS and ~0.44 of one CPU
 core in release mode. The app shows free RAM/disk in the status bar and switches
@@ -208,7 +234,8 @@ to the Eco profile if available memory drops below 100 MB.
 | All tiles black, UI visible | FBO/viewport bug | Render inside FBO; never call mpv into the default framebuffer |
 | `Reconnecting` loop | wrong URL/password, camera blocked, 2-session limit | exponential backoff; check log and `ss` |
 | Third connection fails | camera limit reached | CamView uses one session; stop the other client |
-| Recording 0 bytes | mpv buffering | stop normally; do not delete |
+| Recording 0 bytes | mpv buffering | wait or stop normally; rotation uses time fallback |
+| Storage cap exceeded | active/recent clip or one-segment margin | prune runs every 10 s; active clips are never deleted |
 | `Cannot load libcuda.so.1` | mpv probing CUDA | harmless; VA-API is used |
 | Tunnel not starting | `socat` missing or port conflict | dynamic port allocation, restart with backoff |
 | High RSS | too many main streams or extra apps | Eco profile, fullscreen, close other browsers |

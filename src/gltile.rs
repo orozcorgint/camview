@@ -16,13 +16,16 @@ const FS: &str = r#"#version 330 core
 in vec2 v_uv;
 out vec4 color;
 uniform sampler2D tex;
+uniform vec2 uv_offset;
+uniform vec2 uv_scale;
 void main() {
-    color = texture(tex, v_uv);
+    color = texture(tex, uv_offset + v_uv * uv_scale);
 }
 "#;
 
 /// FBO + shader that draws an mpv video frame inside a tile rectangle.
 /// All methods are called with the current OpenGL context (paint callback).
+#[derive(Default)]
 pub struct TileGl {
     fbo: Option<glow::Framebuffer>,
     texture: Option<glow::Texture>,
@@ -33,19 +36,6 @@ pub struct TileGl {
 }
 
 unsafe impl Send for TileGl {}
-
-impl Default for TileGl {
-    fn default() -> Self {
-        Self {
-            fbo: None,
-            texture: None,
-            program: None,
-            vao: None,
-            size: (0, 0),
-            failed: false,
-        }
-    }
-}
 
 impl TileGl {
     fn compile_program(gl: &glow::Context) -> Option<(glow::Program, glow::VertexArray)> {
@@ -188,6 +178,7 @@ impl TileGl {
         true
     }
 
+    #[allow(clippy::too_many_arguments)] // Keeps the render call explicit and allocation-free.
     pub fn draw(
         &mut self,
         gl: &glow::Context,
@@ -196,10 +187,50 @@ impl TileGl {
         vp_bottom: i32,
         vp_w: i32,
         vp_h: i32,
+        uv_offset: [f32; 2],
+        uv_scale: [f32; 2],
+        high_res: bool,
     ) {
-        let w = vp_w.max(1);
-        let h = vp_h.max(1);
-        if !self.ensure(gl, w, h) {
+        if player.width == 0 || player.height == 0 {
+            return;
+        }
+
+        let tile_w = vp_w.max(1) as f32;
+        let tile_h = vp_h.max(1) as f32;
+        let aspect = if player.aspect.is_finite() && player.aspect > 0.0 {
+            player.aspect
+        } else {
+            player.width as f32 / player.height as f32
+        };
+
+        // Keep the video in its own aspect ratio and letterbox it inside the tile.
+        let (content_w, content_h) = if tile_w / tile_h > aspect {
+            (tile_h * aspect, tile_h)
+        } else {
+            (tile_w, tile_w / aspect)
+        };
+        let content_w = content_w.round().max(1.0) as i32;
+        let content_h = content_h.round().max(1.0) as i32;
+        let content_left = vp_left + (vp_w.max(1) - content_w) / 2;
+        let content_bottom = vp_bottom + (vp_h.max(1) - content_h) / 2;
+
+        // Zooming in fullscreen benefits from a higher-resolution FBO. Cap it at
+        // 1920x1080 and at the source resolution to keep the Atom GPU budget.
+        let (fbo_w, fbo_h) = if high_res {
+            let mut w = (content_w as f32 * 2.0)
+                .min(player.width as f32)
+                .min(1920.0);
+            let mut h = w / aspect;
+            if h > 1080.0 {
+                h = 1080.0;
+                w = h * aspect;
+            }
+            (w.round().max(1.0) as i32, h.round().max(1.0) as i32)
+        } else {
+            (content_w, content_h)
+        };
+
+        if !self.ensure(gl, fbo_w, fbo_h) {
             return;
         }
         let (Some(fbo), Some(tex), Some(program), Some(vao)) =
@@ -215,17 +246,17 @@ impl TileGl {
             gl.disable(glow::DEPTH_TEST);
             gl.disable(glow::CULL_FACE);
             gl.bind_framebuffer(glow::FRAMEBUFFER, Some(fbo));
-            gl.viewport(0, 0, w, h);
+            gl.viewport(0, 0, fbo_w, fbo_h);
             gl.clear_color(0.0, 0.0, 0.0, 1.0);
             gl.clear(glow::COLOR_BUFFER_BIT);
         }
-        player.render_to_fbo(fbo.0.get() as i32, w, h);
+        player.render_to_fbo(fbo.0.get() as i32, fbo_w, fbo_h);
 
         unsafe {
             gl.bind_framebuffer(glow::FRAMEBUFFER, None);
-            // Restore the viewport to the tile rectangle (egui set it before the
-            // callback and mpv changed it to the FBO viewport).
-            gl.viewport(vp_left, vp_bottom, vp_w, vp_h);
+            // egui set the viewport to the tile before the callback. Restrict it
+            // to the fitted video rectangle and let the shader crop with UVs.
+            gl.viewport(content_left, content_bottom, content_w, content_h);
             gl.disable(glow::SCISSOR_TEST);
             gl.disable(glow::BLEND);
             gl.disable(glow::DEPTH_TEST);
@@ -237,11 +268,19 @@ impl TileGl {
             if let Some(loc) = gl.get_uniform_location(program, "tex") {
                 gl.uniform_1_i32(Some(&loc), 0);
             }
+            if let Some(loc) = gl.get_uniform_location(program, "uv_offset") {
+                gl.uniform_2_f32(Some(&loc), uv_offset[0], uv_offset[1]);
+            }
+            if let Some(loc) = gl.get_uniform_location(program, "uv_scale") {
+                gl.uniform_2_f32(Some(&loc), uv_scale[0], uv_scale[1]);
+            }
             gl.draw_arrays(glow::TRIANGLES, 0, 3);
             gl.bind_texture(glow::TEXTURE_2D, None);
             gl.bind_vertex_array(None);
             gl.use_program(None);
             gl.bind_framebuffer(glow::FRAMEBUFFER, None);
+            // Leave the viewport as egui expects it for subsequent overlays.
+            gl.viewport(vp_left, vp_bottom, vp_w, vp_h);
         }
     }
 }

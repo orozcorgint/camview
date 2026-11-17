@@ -3,7 +3,9 @@ mod config;
 mod gltile;
 mod platform;
 mod player;
+mod storage;
 mod tunnel;
+mod zoom;
 
 use std::path::Path;
 use std::process::Command;

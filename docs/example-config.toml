@@ -16,6 +16,12 @@ autostart = false
 dir = "/home/user/Videos/CamView"
 min_free_mb = 500
 
+[recording]
+# Global budget for every CamView recording. 0 disables the limit.
+max_storage_mb = 1024
+# A new segment is opened after this many seconds (or 64 MB, whichever first).
+segment_seconds = 120
+
 [[cameras]]
 id = "front-door"
 name = "Front door"

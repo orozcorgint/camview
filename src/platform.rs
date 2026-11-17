@@ -49,8 +49,8 @@ pub fn date_dir() -> String {
     Local::now().format("%Y-%m-%d").to_string()
 }
 
-pub fn time_file() -> String {
-    Local::now().format("%H-%M-%S").to_string()
+pub fn time_file_ms() -> String {
+    Local::now().format("%H-%M-%S-%3f").to_string()
 }
 
 pub fn date_time_file() -> String {

@@ -35,9 +35,12 @@ require breaking one, stop and explain the trade-off before changing it.
    the grid, keep the main stream for fullscreen, and preserve the live-tile
    limit and RAM watchdog. Avoid unbounded buffers and extra GL textures.
 7. **Rust 1.85 / eframe 0.32.3 compatibility.** The project intentionally pins
-   `eframe`/`egui` 0.32.3, uses edition 2021, `rust-version = "1.85"` and
-   `resolver = "3"`. `Cargo.lock` is committed. Upgrades must be tested on the
-   target machine and documented in `CHANGELOG.md`.
+   `eframe`/`egui` 0.32.3, the newest release that builds with Debian 13's
+   Rust 1.85. It uses edition 2021, `rust-version = "1.85"` and
+   `resolver = "3"`. `Cargo.lock` is committed. Newer egui releases require
+   Rust 1.95 and a different `App` lifecycle; treat that as a separate,
+   benchmark-gated upgrade. Other upgrades must be tested on the target
+   machine and documented in `CHANGELOG.md`.
 8. **All OpenGL work stays on the render thread.** Create/use GL resources only
    inside an `egui_glow` paint callback with the context current. Do not call GL
    from `update()` or worker threads.
@@ -52,7 +55,9 @@ require breaking one, stop and explain the trade-off before changing it.
 | `src/main.rs` | CLI (`--selftest`, `--import-m3u`), signal handler, eframe boot |
 | `src/app.rs` | UI, state, camera manager, settings, actions, sync/player lifecycle |
 | `src/player.rs` | libmpv wrapper: load, reconnect/backoff, audio, snapshots, `stream-record` |
-| `src/gltile.rs` | FBO + GLSL shader that composites an mpv render context into a tile |
+| `src/gltile.rs` | Aspect-correct FBO + GLSL shader with zoom/pan UVs |
+| `src/storage.rs` | Recording scan, global storage accounting and oldest-clip pruning |
+| `src/zoom.rs` | Fullscreen zoom/pan state and focal-point math |
 | `src/tunnel.rs` | App-managed `socat` TLS listeners, port allocation, supervision |
 | `src/config.rs` | TOML model, atomic `0600` saves, read-only M3U import, URL builder |
 | `src/platform.rs` | Paths, logging, disk/RAM queries, autostart, single-instance, GL loader |
@@ -120,16 +125,25 @@ addresses (`192.0.2.0/24`) or synthetic streams.
   and all tiles would overlap in the bottom-left corner.
 - Respect `max_live_tiles` and `fullscreen`: `sync_players()` is the only place
   that should create/destroy players.
+- Fullscreen zoom belongs in `src/zoom.rs` and must only change the shader UVs
+  and the fitted video viewport. Never create another decoder or RTSP session
+  for zoom. Grid tiles stay at 1×.
 
 ### Change recording
 
 - Recording is `mpv.set_property("stream-record", path)`; stopping sets an empty
   string. The file is often 0 bytes while buffering and only gets its final size
-  on stop — do not "fix" this by deleting the file or adding a size watchdog.
-- Do not stop/restart the stream to rotate files without an explicit design
-  review; it breaks the current clip.
-- Keep the free-space guard and the "recording stops if the stream reloads"
-  behavior. Update `README.md` if behavior changes.
+  when the property changes — do not use file size as a liveness signal.
+- Rotating a segment is allowed: set `stream-record` to the next path. mpv
+  closes the old file and opens the new one on the same RTSP session. Never
+  reload the stream just to rotate a file.
+- The global storage limit is deliberately soft by one segment: prune to
+  `cap - 64 MiB`, never delete the active clip, files younger than 30 s,
+  symlinks or files outside the CamView camera/date layout.
+- A recording intent survives a reconnect: `src/app.rs` resumes it when the
+  player is live again. Stopping the user recording clears that intent.
+- Keep the free-space guard. Update `README.md` and
+  `docs/ARCHITECTURE.md` if behavior changes.
 
 ### Change the tunnel
 
@@ -144,8 +158,8 @@ addresses (`192.0.2.0/24`) or synthetic streams.
 - Prefer the standard library and existing crates. Justify any new dependency
   in the PR description, check its MSRV/edition (must compile with Rust 1.85),
   license, and memory impact.
-- Do not add Tokio, a web framework, a database, an AI runtime or a GUI toolkit
-  in v0.1. The app deliberately has no async runtime.
+- Do not add Tokio, a web framework, a database, an AI runtime or a GUI toolkit.
+  The app deliberately has no async runtime.
 
 ## 6. Debugging checklist
 

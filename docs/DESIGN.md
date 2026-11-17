@@ -1,7 +1,7 @@
 # Design notes
 
 This document records the product and engineering decisions behind CamView
-v0.1. It is intentionally sanitized: no real camera addresses, credentials,
+v0.2. It is intentionally sanitized: no real camera addresses, credentials,
 recordings or network details belong here.
 
 ## Problem
@@ -20,16 +20,17 @@ guards and connection-budget awareness.
 
 | Topic | Decision | Rationale |
 |---|---|---|
-| Scope | Viewer + manual recorder | Keep v0.1 small, testable and light |
+| Scope | Viewer + manual recorder | Keep the app small, testable and light |
 | Layout | Grid + fullscreen | Standard CCTV workflow; substreams keep RAM low |
 | Cameras | RTSP and RTSPS | Cover consumer cameras with and without TLS |
-| PTZ / ONVIF | Out of scope for v0.1 | Target cameras are fixed; avoids protocol surface |
-| Motion detection | Out of scope for v0.1 | Extra decode or frame analysis is expensive; manual recording first |
-| Notifications | Out of scope for v0.1 | Desktop-only app; no cloud/phone dependency |
-| Recording | Stream copy to MKV | No transcode CPU, no quality loss, one connection |
+| PTZ / ONVIF | Out of scope | Target cameras are fixed; avoids protocol surface |
+| Motion detection | Out of scope | Extra decode or frame analysis is expensive; manual recording first |
+| Notifications | Out of scope | Desktop-only app; no cloud/phone dependency |
+| Recording | Stream copy to segmented MKV | No transcode CPU, no quality loss, one connection |
 | Audio | Optional monitoring, included in recording | Evidence value; muted by default |
-| Storage | Selectable folder + free-space guard | Avoid filling the system disk; support USB/NAS mounts |
-| Retention | Manual deletion | Keep behavior predictable; retention is a roadmap item |
+| Storage | Selectable folder, free-space guard and global cap | Bound disk usage; oldest segments are replaced automatically |
+| Retention | Manual until the cap; oldest-first pruning | Predictable DVR behavior without a database |
+| Zoom | Fullscreen digital zoom, shader UV crop | Better detail with no second decoder or connection |
 | Remote access | None | No inbound web server; security and memory |
 | UI language | English | Open-source/portfolio baseline; Spanish localization is a v0.2 item |
 
@@ -75,9 +76,13 @@ never binds to a public interface. See [SECURITY.md](../SECURITY.md).
 - it preserves the exact stream (video + audio);
 - MKV is resilient and does not need a final moov atom like MP4.
 
-The downside is less control over segmentation and buffering. The file can be
-0 bytes while mpv buffers the container header. v0.1 therefore avoids file-size
-watchdogs and relies on graceful shutdown to finalize the clip.
+The downside is less control over buffering. The file can be 0 bytes while mpv
+buffers the container header, so rotation uses the configured time plus a
+64 MiB size check when the file is visible. Changing `stream-record` to a new
+path makes mpv close the old segment and open the next one on the same RTSP
+session. The global cap then removes the oldest finished segments, never the
+active one. This is the smallest implementation that provides DVR-style rolling
+storage without a second connection.
 
 ## Alternatives considered
 

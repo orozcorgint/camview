@@ -4,7 +4,7 @@
 
 | Version | Supported |
 |---|---|
-| 0.1.x | Yes |
+| 0.2.x | Yes |
 
 ## Reporting a vulnerability
 
@@ -85,8 +85,12 @@ prefer a validating configuration. A future version may add certificate pinning.
 ### Recording
 
 - Files are unencrypted Matroska.
-- The current clip may be incomplete after a hard kill or power loss.
+- The current segment may be incomplete after a hard kill or power loss.
 - Disk space is monitored; recordings stop below the configured threshold.
+- The global recording limit defaults to 1 GB and deletes the oldest finished
+  clips when reached. Set it deliberately; deleted clips are not recoverable.
+- Pruning only touches timestamped `.mkv` files in the CamView
+  `<camera>/<date>/` layout, never the active segment or symlinks.
 
 ### Network exposure
 
