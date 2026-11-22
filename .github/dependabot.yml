@@ -9,9 +9,20 @@ updates:
       cargo-minor-patch:
         patterns: ["*"]
         update-types: ["minor", "patch"]
+    ignore:
+      # eframe/egui 0.33+ require Rust 1.88+ and a different App lifecycle.
+      # The Rust 1.95 upgrade is tracked as a separate benchmark-gated task.
+      - dependency-name: "eframe"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      - dependency-name: "egui"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
       interval: monthly
     open-pull-requests-limit: 2
+    groups:
+      github-actions:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]

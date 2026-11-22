@@ -4,6 +4,26 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.1] - 2026-11-22
+
+### Added
+
+- Debian binary package (`make deb`) with desktop entry, icon, AppStream
+  metadata, manual page, copyright, changelog and automatic shared-library
+  dependency detection.
+- `Package` GitHub Actions workflow that builds the `.deb` on pull requests and
+  attaches it to published releases.
+- English man page and AppStream metadata for desktop integration.
+
+### Changed
+
+- Refreshed `Cargo.lock` with the latest dependencies compatible with Rust
+  1.85.
+- Dependabot ignores minor/major `eframe`/`egui` updates until the separate
+  Rust 1.95 toolchain migration is benchmarked.
+- Corrected the remaining Spanish diagnostics in the self-test and direct
+  connection output.
+
 ## [0.2.0] - 2026-11-16
 
 ### Added

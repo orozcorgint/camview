@@ -9,6 +9,7 @@ memory invariants in [AGENTS.md](../AGENTS.md) remain the default.
 - [x] Continuous recording with a global storage limit and oldest-clip pruning.
 - [x] Fullscreen digital zoom with touch, mouse/touchpad and keyboard.
 - [x] Automatic recording resume after a camera reconnect.
+- [x] Debian package and release artifacts for one-command installation.
 - [ ] Spanish UI localization with a language setting (English is current).
 - [ ] Keyboard navigation and accessibility pass (focus, shortcuts, labels).
 - [ ] Better camera form validation (duplicate IDs, port/path checks).

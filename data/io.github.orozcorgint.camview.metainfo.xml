@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.orozcorgint.camview</id>
+  <name>CamView</name>
+  <summary>Lightweight RTSP camera viewer and recorder</summary>
+  <developer id="io.github.orozcorgint">
+    <name>orozcorgint</name>
+  </developer>
+
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+
+  <description>
+    <p>
+      CamView is a native Linux desktop application for viewing and recording
+      RTSP and RTSPS cameras. It is designed for low-power x86 machines and
+      keeps a single RTSP session per camera while allowing simultaneous
+      viewing and recording.
+    </p>
+    <p>
+      The grid uses camera substreams to keep memory low; fullscreen switches
+      to the main stream and supports digital zoom with touch, mouse, touchpad
+      and keyboard controls. Recording is a stream copy to Matroska segments
+      with an optional global rolling storage limit.
+    </p>
+  </description>
+
+  <launchable type="desktop-id">camview.desktop</launchable>
+  <provides>
+    <binary>camview</binary>
+  </provides>
+
+  <url type="homepage">https://github.com/orozcorgint/camview</url>
+  <url type="bugtracker">https://github.com/orozcorgint/camview/issues</url>
+  <url type="vcs-browser">https://github.com/orozcorgint/camview</url>
+
+  <screenshots>
+    <screenshot type="default">
+      <image>https://raw.githubusercontent.com/orozcorgint/camview/main/docs/assets/ui-mockup.png</image>
+      <caption>Multi-camera view with recording and storage controls</caption>
+    </screenshot>
+  </screenshots>
+
+  <releases>
+    <release version="0.2.1" date="2026-11-22">
+      <description>
+        <p>Debian packaging, release automation and dependency refresh.</p>
+      </description>
+    </release>
+    <release version="0.2.0" date="2026-11-16">
+      <description>
+        <p>Rolling recording storage, automatic resume and fullscreen zoom.</p>
+      </description>
+    </release>
+  </releases>
+
+  <content_rating type="oars-1.1"/>
+
+  <categories>
+    <category>AudioVideo</category>
+    <category>Security</category>
+  </categories>
+
+  <keywords>
+    <keyword>camera</keyword>
+    <keyword>cctv</keyword>
+    <keyword>security</keyword>
+    <keyword>rtsp</keyword>
+    <keyword>recording</keyword>
+  </keywords>
+</component>

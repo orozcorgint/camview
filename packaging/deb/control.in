@@ -1,0 +1,21 @@
+Package: camview
+Version: @VERSION@
+Architecture: @ARCH@
+Maintainer: orozcorgint <orozcorgint@users.noreply.github.com>
+Installed-Size: @INSTALLED_SIZE@
+Depends: @DEPENDS@
+Recommends: @RECOMMENDS@
+Suggests: @SUGGESTS@
+Section: video
+Priority: optional
+Homepage: https://github.com/orozcorgint/camview
+Description: lightweight RTSP camera viewer and recorder
+ CamView is a native Linux viewer and recorder for RTSP and RTSPS cameras,
+ designed for low-power desktops. It displays several cameras in a grid,
+ records stream-copy Matroska segments with a global rolling storage limit,
+ resumes recordings after a camera reconnect, and supports fullscreen digital
+ zoom.
+ .
+ It uses libmpv for hardware-accelerated decoding and keeps one RTSP session
+ per camera for simultaneous viewing and recording. Camera credentials are
+ stored locally in ~/.config/camview/config.toml with mode 0600.

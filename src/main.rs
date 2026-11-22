@@ -50,7 +50,7 @@ fn main() {
 
     if args.iter().any(|a| a == "--selftest") {
         if let Err(e) = selftest() {
-            eprintln!("SELFTEST FALLÓ: {e}");
+            eprintln!("SELFTEST FAILED: {e}");
             std::process::exit(1);
         }
         return;
@@ -118,7 +118,7 @@ fn selftest() -> Result<(), String> {
             "{}: tunnel {}",
             cam.name,
             port.map(|p| format!("127.0.0.1:{p}"))
-                .unwrap_or_else(|| format!("directo {}:{}", cam.host, cam.rtsp_port))
+                .unwrap_or_else(|| format!("direct {}:{}", cam.host, cam.rtsp_port))
         );
     }
 

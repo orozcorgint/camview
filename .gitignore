@@ -2,6 +2,9 @@
 /target/
 **/*.rs.bk
 
+# Release artifacts
+/dist/
+
 # Local application data (never commit camera configs, recordings or logs)
 config.toml
 config.toml.*
