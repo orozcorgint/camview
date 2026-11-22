@@ -37,6 +37,8 @@ simultaneous viewing and recording.
 - Selectable recording folder and a free-space guard.
 - Autostart, single-instance guard, rotating logs and `0600` configuration.
 - Clean shutdown finalizes the active recording.
+- Reproducible Debian packaging with desktop entry, icon, AppStream metadata
+  and man page; release workflows attach the `.deb` to GitHub releases.
 
 ## Why this project exists
 
@@ -111,7 +113,31 @@ sudo apt install rustc cargo pkg-config libmpv-dev libssl-dev \
   libxrandr-dev libxi-dev libgl1-mesa-dev libegl1-mesa-dev libwayland-dev
 ```
 
-## Build and run
+## Install from a Debian package
+
+The recommended installation on Debian 13, Ubuntu 24.04 or a compatible
+desktop is the `.deb` attached to each GitHub release:
+
+```bash
+sudo apt install ./camview_<version>-1_<architecture>.deb
+camview
+```
+
+`apt` installs the runtime dependencies and registers the application in the
+desktop menu. The package installs system-wide under `/usr`; user data stays in
+the home directory and is not removed when the package is uninstalled.
+
+To build the package yourself:
+
+```bash
+make deb
+sudo apt install ./dist/camview_<version>-1_<architecture>.deb
+```
+
+See [packaging/README.md](packaging/README.md) for package contents, supported
+environment variables and verification commands.
+
+## Build and run from source
 
 ```bash
 git clone https://github.com/orozcorgint/camview.git
@@ -144,8 +170,8 @@ maintenance task.
 
 ## Usage
 
-1. Launch **CamView** from the application menu or with
-   `~/.local/bin/camview`.
+1. Launch **CamView** from the application menu or with `camview` (package
+   install) or `~/.local/bin/camview` (per-user source install).
 2. Open **Cameras → + Add camera**.
 3. Enter a name, host/IP, RTSP port, stream paths and credentials.
    Enable **TLS** for RTSPS cameras (CamView will create the local tunnel).

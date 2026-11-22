@@ -3,7 +3,7 @@ BINDIR := $(PREFIX)/bin
 APPDIR := $(PREFIX)/share/applications
 ICONDIR := $(PREFIX)/share/icons/hicolor/scalable/apps
 
-.PHONY: all build release run install uninstall fmt check secrets test selftest clean
+.PHONY: all build release run install uninstall deb fmt check secrets test selftest clean
 
 all: build
 
@@ -43,6 +43,9 @@ install: release
 
 uninstall:
 	rm -f "$(BINDIR)/camview" "$(APPDIR)/camview.desktop" "$(ICONDIR)/camview.svg"
+
+deb:
+	./packaging/build-deb.sh
 
 clean:
 	cargo clean

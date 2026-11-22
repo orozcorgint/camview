@@ -77,6 +77,8 @@ Keep commits focused. Do not force-push a shared branch.
 - [ ] Recording rotation does not reload the RTSP stream; pruning never deletes
       the active clip or files outside the CamView layout.
 - [ ] Zoom changes only shader UVs / FBO sizing, not camera connections.
+- [ ] Packaging changes were tested with `make deb` and
+      `dpkg-deb --contents`.
 - [ ] Memory/CPU impact is considered and, if relevant, measured.
 - [ ] `README.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md` and
       `CHANGELOG.md` are updated when behavior or usage changes.

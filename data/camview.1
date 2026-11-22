@@ -1,0 +1,75 @@
+.TH CAMVIEW 1 "2026-11-22" "camview 0.2.1" "User Commands"
+.SH NAME
+camview \- lightweight RTSP camera viewer and recorder
+.SH SYNOPSIS
+.B camview
+.RI [ options ]
+.SH DESCRIPTION
+.B CamView
+is a native Linux desktop application for viewing and recording RTSP and
+RTSPS cameras. It is designed for low-power x86 machines and keeps a single
+RTSP session per camera while allowing simultaneous viewing and recording.
+.PP
+The application uses libmpv for hardware-accelerated decoding and OpenGL for
+compositing. Camera credentials are stored in
+.I ~/.config/camview/config.toml
+with mode 0600 and are never written to logs or shown in the user interface.
+.SH OPTIONS
+.TP
+.B \-h, \-\-help
+Print a short command-line help message and exit.
+.TP
+.B \-\-import\-m3u
+Read a legacy M3U playlist from
+.I ~/cameras.m3u
+or
+.I ~/camaras.m3u
+and save the cameras to the CamView configuration. The source playlist and
+user services are only read; they are never modified.
+.TP
+.B \-\-selftest
+Create the local TLS tunnels, probe the configured cameras, decode each
+substream, take a short test recording and verify it with ffprobe. This
+requires the configured cameras to be reachable and is intended for
+troubleshooting on the local machine.
+.SH FILES
+.TP
+.I ~/.config/camview/config.toml
+Camera list, recording folder and preferences. Written atomically with mode
+0600.
+.TP
+.I ~/Videos/CamView/
+Recordings, organised as
+.IR camera/date/clip.mkv .
+The oldest finished clips are removed when the configured global storage limit
+is reached.
+.TP
+.I ~/Pictures/CamView/
+JPEG snapshots.
+.TP
+.I ~/.local/state/camview/camview.log
+Rotating diagnostic log. RTSP credentials are redacted.
+.SH ENVIRONMENT
+.TP
+.B HOME
+Used to locate configuration, recordings, snapshots and logs. CamView does not
+hard-code a user name.
+.TP
+.B DISPLAY
+X11 display used for the OpenGL context. Native Wayland is not enabled in this
+release.
+.SH SECURITY
+CamView listens only on localhost for RTSPS tunnels and does not open a web
+server or a remote-control port. TLS certificate verification in the local
+tunnel is disabled for compatibility with self-signed consumer cameras; use
+CamView only on a trusted LAN. See
+.I /usr/share/doc/camview/SECURITY.md
+for the full threat model.
+.SH SEE ALSO
+.BR mpv (1),
+.BR socat (1),
+.BR ffprobe (1)
+.PP
+Project home page:
+.UR https://github.com/orozcorgint/camview
+.UE

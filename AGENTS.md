@@ -60,6 +60,8 @@ require breaking one, stop and explain the trade-off before changing it.
 | `src/zoom.rs` | Fullscreen zoom/pan state and focal-point math |
 | `src/tunnel.rs` | App-managed `socat` TLS listeners, port allocation, supervision |
 | `src/config.rs` | TOML model, atomic `0600` saves, read-only M3U import, URL builder |
+| `data/` | Desktop entry template, icon, man page and AppStream metadata |
+| `packaging/` | Debian package build script, control templates and package docs |
 | `src/platform.rs` | Paths, logging, disk/RAM queries, autostart, single-instance, GL loader |
 | `docs/ARCHITECTURE.md` | Technical design, data flow, trade-offs |
 | `docs/DESIGN.md` | Product decisions and the original sanitized rationale |
@@ -90,7 +92,10 @@ cargo build --release
 - `cargo clippy --all-targets` is recommended when the `rust-clippy` package is
   installed. Do not silence warnings globally; fix them or document why.
 - CI (`.github/workflows/ci.yml`) runs fmt, check and tests on Ubuntu with the
-  required system libraries.
+  required system libraries. The `Package` workflow builds the `.deb` on
+  packaging changes and publishes it with releases.
+- When packaging inputs change, run `make deb` and inspect the artifact with
+  `dpkg-deb --info` and `dpkg-deb --contents`. Never commit `dist/`.
 
 Manual smoke tests (require real cameras, never commit the URLs):
 
@@ -153,6 +158,18 @@ addresses (`192.0.2.0/24`) or synthetic streams.
 - Ports are allocated dynamically; never reuse the legacy 8554–8556 ports of
   another application.
 
+### Change packaging
+
+- Keep `data/camview.desktop.in`, `data/camview.svg`, `data/camview.1` and
+  `data/io.github.orozcorgint.camview.metainfo.xml` consistent with the UI and
+  version.
+- The package must install only under `/usr`; user configuration, recordings,
+  snapshots and logs stay in the home directory.
+- Use `packaging/build-deb.sh`; do not hand-edit generated files in `dist/`.
+- Run `make deb` and `dpkg-deb --contents` before opening a PR. If `lintian` is
+  available, run it and fix policy warnings.
+- Do not add camera data, credentials or recordings to the package.
+
 ### Add a dependency
 
 - Prefer the standard library and existing crates. Justify any new dependency
@@ -178,7 +195,8 @@ addresses (`192.0.2.0/24`) or synthetic streams.
 ## 7. Security review before a PR
 
 - [ ] No real IPs, hostnames, camera names, credentials, tokens or personal data.
-- [ ] No `config.toml`, `*.mkv`, `*.log`, snapshots or secrets staged.
+- [ ] No `config.toml`, `*.mkv`, `*.log`, snapshots, secrets or `dist/`
+      artifacts staged.
 - [ ] Tunnels bind `127.0.0.1`; no new listening socket.
 - [ ] Logs/UI redact credentials; errors never print a full RTSP URL.
 - [ ] Config remains `0600`; new files have reasonable permissions.

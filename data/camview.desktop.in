@@ -5,6 +5,7 @@ Name=CamView
 GenericName=IP camera viewer
 Comment=Lightweight RTSP camera viewer and recorder
 Exec=@BINDIR@/camview
+TryExec=@BINDIR@/camview
 Icon=camview
 Terminal=false
 Categories=AudioVideo;Video;
